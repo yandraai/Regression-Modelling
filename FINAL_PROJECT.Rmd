@@ -1,0 +1,484 @@
+---
+title: "Predicting Housing Prices using Regression model"
+author: "Aruna Harini Yandrapally"
+date: "Date: 06th December 2019"
+output: html_document
+theme: cerulean
+---
+<style type="text/css">
+
+body{ /* Normal  */
+      font-size: 14px;
+      text-align: justify
+  }
+td {  /* Table  */
+  font-size: 8px;
+}
+h1.title {
+  font-size: 35px;
+  color: DarkBlue;
+}
+h1 { /* Header 1 */
+  font-size: 25px;
+  color: DarkBlue;
+}
+h2 { /* Header 2 */
+    font-size: 22px;
+    color: DarkBlue;
+}
+h3 { /* Header 3 */
+  font-size: 16px;
+  color: DarkBlue;
+}
+
+code.r{ /* Code block */
+    font-size: 12px;
+}
+pre {
+  max-height: 300px;
+  float: left;
+  width: 910px;
+  overflow-y: auto;
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+
+
+
+The **Purpose of this project** is to first study and analyse what has been the trend in the selling price of houses in Cincinnati area by looking at the data collected from websites - [Zillow](https://www.zillow.com/) and [Trulia](https://www.trulia.com/). Next is creating a model based on selected features which could predict the selling price of houses that come up for sale in the future with high degree of accuracy. 
+
+**Quick Summary of Final Model** : We have built 2 models, one using a bigger dataset with less number of covariates, and other small dataset with additional variables, because we have sparse dataset. The plan is to average the two models to arrive at the final prediction.
+
+We arrived at the below equations finally:
+
+![](Capture.PNG)
+
+# {.tabset}
+
+## Data Exploration & Data Cleaning
+
+This dataset has 18 covariates and 389 observations collected manually from the mentioned websites. The dataset initially had 606 observations collected by all the students in class. Since there was a lot of data entry & duplication issues in the collected data, data cleaning was very important at this stage. Hence as part of Data Cleaning step, all such problematic records were deleted. Here is the small sample of the dataset used and the type of columns used for further analysis.
+
+```{r}
+housing <- read.csv("final_housing.csv",h=T)
+head(housing,5)
+```
+```{r}
+str(housing)
+```
+
+
+Apart from removal of problematic records, we have also made below updates to standardise the data:
+      <br>* Segregated Column 'Parking' into 'Parking spaces' and 'Parking' columns which describes the type of parking space and the no. of parking spaces available respectively.
+      <br>* Tried Collecting more information about the arrangement of cooling and heating in the house through columns named 'Cooling' and 'Heating' in our dataset but the no. of records with these extra information weren't enough to be considered in the model hence these were ignored in the final model.
+      <br>* Created a new column named 'Age' from the Original column Yearbuilt by using the formula: Yearbuilt - Currentyear
+      
+Following are the descriptions of few important variables used in modelling going forward:
+      <br> **Sold Price**: This is the selling price of the house. This is our dependent variable/ y variable for which value is to be predicted.
+      <br> **Zipcode** : This field tells the zipcode of the area where the house is located. This is one of the most important variables because its a known fact that if it is a lavishing area, the cost of the property will be high and if it's not then cost will be low in most of the cases. 
+      <br> **SquarefeetArea**: This field tells the total built in area of the house. Another important feature as the cost of property definitely depends on how big/small the house is.
+      <br> **Bathrooms** : This field tells the no. of bathrooms in the house.
+      <br> **Built In**: This field tells the year in which the house was constructed. This may/may not be a significant feature because sometimes ancient houses are super costly being antique whereas sometimes they are not.
+      <br> **ParkingSpaces**: This field tells the total no. of parking spaces available with the property purchased,
+
+Let's now have a look at the summary statistics of Selling Price in each area. This gives us an idea about those particular areas where the selling price of houses in general is at higher or lower end. Also it tells us the count of houses in each area/zipcode in our dataset.
+
+```{r}
+library(plyr)
+ddply(housing, c("Zipcode"), summarise,
+               No.ofhouses    = length(Zipcode),
+               Soldprice_Mean = mean(Soldprice),
+               Soldprice_Max = max(Soldprice),
+               Soldprice_Min = min(Soldprice),
+               Soldprice_Median = median(Soldprice),
+               Soldprice_sd   = sd(Soldprice)
+)
+
+```
+
+## Data Visualization
+
+Now let's look at some visualization graphs to better understand our data:
+
+### Plotting Scatter Plots , Histograms and Correlation:
+
+```{r warning=FALSE, fig.height=50,fig.width=50}
+library(psych)
+pairs.panels(housing)
+```
+
+Looking at the output of pairs.panels(housing), we notice variables (Cooling, Heating) looks highly correlated with a correlation coeff. of 0.92 but we cannot consider them as we do not have sufficient data for them. Also because of insufficient data, we cannot even say whether this stats is correct or not, next (Basement, Roof) and (Parking, Roof) variables looks somewhat correlated with correlation coeff. of 0.76 and 0.74 respectively which is comparitively high.
+
+Now let's just try to visualise how would our data distribution in 3d space look like if we plot our response variable Soldprice with two independent variables Zipcode and Squaredfeet.
+
+```{r echo = FALSE, message = FALSE, warning= FALSE}
+attach(housing)
+library(plotly)
+
+fig <- plot_ly(housing,
+        x =~ Zipcode,
+        y =~ Squaredfeet,
+        z =~ Soldprice, 
+        type= "scatter3d",
+        mode = "markers"
+        ) %>%
+        layout(annotations = list(x = 1, y = -0.1, text = "Hover data points to see more info", showarrow = F, xref='paper', yref='paper', xanchor='right', yanchor='auto', xshift=0, yshift=0,
+      font=list(size=15, color="Black")))
+fig
+```
+
+   
+### Plotting BoxPlot for our variables:   
+
+```{r fig.height=10,fig.width=10}
+attach(housing)
+par(mfrow=c(2,2))
+boxplot(Soldprice, xlab="Soldprice ",col="grey", outcol="red")
+boxplot(bedrooms ,xlab="Bedrooms ",col="grey", outcol="red")
+boxplot(bathrooms ,xlab="Bathrooms ",col="grey", outcol="red")
+boxplot(Stories ,xlab="Stories ",col="grey", outcol="red")
+boxplot(Age, xlab="Age ",col="grey", outcol="red")
+boxplot(Squaredfeet  ,xlab="Squaredfeet  ",col="grey", outcol="red")
+boxplot(Lotsizeinsqft  ,xlab="Lotsizeinsqft ",col="grey", outcol="red")
+boxplot(Parkingspaces ,xlab="Parkingspaces ",col="grey", outcol="red")
+```
+In all the above box plots, we see there are few <span style="color:red">red</span> circles in each of them. These indicate the outliers in respective variables. In the upcoming sections we will see how to deal with these outliers to come up with the best model possible with least error rate.
+
+## Data Modeling
+
+**Understanding the data** : There are 389 records with 19 variables in the initial dataset. However, the data corresponding to the 9 variables is very sparse,and we believe that they add a lot of significance to the modelling.
+
+Therefore, we have decided to build two models, one with the 389 rows and first 9 variables which is a dense table, we call this as Data1 and the next model with around 159 rows with all the variables which is also now almost a dense table, let us call this as Data2.
+
+So the entire modelling is based on applying the following steps in each of the data set to receive two separate models: 
+**Model Adequacy Checking - Transformations - Variable Selection - Model Validation - Final Model**
+
+Our plan is to combine the predictions from both these models to arrive at the final prediction.
+
+![](Capture.jpeg)
+
+
+
+
+###  Model Specification on Data1:
+```{r echo=FALSE, message=FALSE, warning=FALSE }
+library(MASS)
+```
+
+Initially we have included all the base variables and obtained the below model:
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+housing <- read.csv("final_housing.csv",h=T)
+attach(housing)
+```
+
+```{r,message=FALSE, warning=FALSE}
+model<- lm(Soldprice~ Zipcode+bedrooms+bathrooms+Stories+Age+Squaredfeet+Lotsizeinsqft)
+```
+
+**Residual Analysis on the Initial Model of Data1:**
+
+Now as part of Model Adequacy checking we need to validate the LINE assumptions of linear Regression:
+
+```{r fig.height=10,fig.width=10,echo=FALSE,messageFALSE, warning=FALSE}
+par(mfrow=c(2,2))
+plot(model)
+```
+
+**Comments on Residual Analysis results on the above model:**
+
+**1. Linearity & Equal Variance Assumptions** : Plot between Residuals Vs Fitted values indicates that the assumptions are not satisfied as the dots are not evenly distributed around zero.
+
+**2. Normality Assumption:** As we see in the Q-Q Plot, though most of the datapoints are around the 45-degree line, the plot is still heavily skewed on both the ends. So this is not satisfied as well.
+
+**3. Outliers:** The instance 288 in the fourth plot between Standardized residuals and leverage has a cooks distance greater 1 which clearly poses like an outlier. Hence removing this instance. This will not be used for further analysis.
+
+
+```{r echo=TRUE,message=FALSE, warning=FALSE}
+housing[288,]
+housing_new<-housing[-c(288),]
+```
+```{r echo=FALSE,message=FALSE, warning=FALSE}
+detach(housing)
+attach(housing_new)
+```
+
+```{r, echo=FALSE,message=FALSE, warning=FALSE}
+model<- lm(Soldprice~ Zipcode+bedrooms+bathrooms+Stories+Age+Squaredfeet+Lotsizeinsqft)
+par(mfrow=c(2,2))
+
+```
+We see that the initial model is not good enough to predict the sold price of houses in Cincinnati and has scope of improvement. Therefore, using various methods like Transformations, Variable Selection, Indicator Variable, etc., we will work towards improving the model.
+
+
+### Model Specification on Data2:
+
+Repeated the same steps as above for the 159 rows and 19 variables (but some of the variables has too less data to include it in the model, hence using only 10 variables rather than 19).
+Initially we have included all the variables and obtained the below model:
+
+```{r echo=FALSE,message=FALSE, warning=FALSE}
+housing_small <- read.csv("data_draft.csv",h=T)
+detach(housing_new)
+attach(housing_small)
+```
+
+
+```{r message=FALSE, warning=FALSE}
+model1 <- lm(Soldprice ~zipcode+bedrooms+bathrooms+Age+Squaredfeet+Lotsizeinsqft+Parkingspaces+Basement+Stories+Fireplace)
+```
+
+**Residual Analysis on the Initial Model of Data2:**
+
+Now as part of Model Adequacy checking we need to validate the LINE assumptions of linear Regression. 
+
+```{r message=FALSE, warning=FALSE}
+par(mfrow=c(2,2))
+plot(model1)
+```
+
+The plots here also imply that they do not satisfy the LINE assumptions. Also, no data points has cook distance > 1.Hence we can say there are no outliers. 
+
+## Model Checking
+
+
+We see that the LINE assumptions are violated in the above section - Residual Analysis, hence we would be transforming the y and possibly x as suggested by BoxCox.
+
+## Transformations on Data1:
+
+**Goal** : We want to choose the model that is simple and at the same time closer to the following LINE assumptions.
+
+**BOXCOX on the present model:**
+
+
+We have considered to go ahead with the log transformation as the lambda value is close to 0 but the true value is about 0.141, for the ease of understanding of the transformed response variable. 
+
+
+After applying the log transformation on sold price, we create a new model and below are the plots:
+
+```{r class.output = "pre"}
+model<- lm(log(Soldprice)~ zipcode+bedrooms+bathrooms+Stories+Age+Squaredfeet+Lotsizeinsqft)
+par(mfrow=c(2,2))
+plot(model)
+```
+
+
+```{r message=FALSE, warning=FALSE}
+summary(model)$sigma^2
+standardized_res1=model$residuals/summary(model)$sigma
+```
+
+We have adopted trial and error and come up with various combinations of models, but keeping in mind the goal of this step ie., to achieve a model as simple as possible, we have decided on the below model:
+
+**zipcode - as.factor**
+
+**Age - Squared**
+
+```{r message=FALSE, warning=FALSE}
+model<- lm(log(Soldprice)~ as.factor(zipcode)+bedrooms+(bathrooms)+(Stories)+I(Age^2)+Squaredfeet+Lotsizeinsqft)
+summary(model)$sigma^2
+standardized_res2=model$residuals/summary(model)$sigma
+plot(model$fitted.values,model$residuals,pch=20,col="blue")
+abline(h=0)
+
+```
+
+The transformed data did improve very much on the Residuals vs Fitted Values graph. At this point we are moving ahead with this data.
+
+## Transformations on Data2:
+
+We will be transforming the x and y values to improve the model but to know which transformation to use, we perform the boxcox.
+
+```{r message=FALSE, warning=FALSE}
+
+boxcox(model1)
+
+model1<- lm(log(Soldprice)~ as.factor(zipcode)+bedrooms+bathrooms+I(Age^2)+Squaredfeet+Lotsizeinsqft+Parkingspaces+Basement+Stories+Fireplace)
+
+
+```
+
+Similar to the rationale for the Data1, we have used log transformation on response variable and as.factor for Zipcode and square of age for the sake of simplicity. And the below graph indicates an improvement on the assumptions.
+
+```{r fig.height=10,fig.width=10,echo=FALSE, message=FALSE, warning=FALSE}
+par(mfrow=c(2,2))
+plot(model1)
+```
+
+## Re-modeling
+
+We will be re-modeling the models created earlier to get better prediction model using Variable Selection.
+
+## Variable Selection on Data1 (after transformations):
+
+We chose Stepwise regression to do the Variable Selection: Started with the null model and added the most significant variable at each step from the Data1 (after transformations). 
+
+```{r echo=FALSE,message=FALSE, warning=FALSE}
+detach(housing_small)
+attach(housing_new)
+```
+
+
+```{r message=FALSE, warning=FALSE}
+add1(lm(log(Soldprice)~as.factor(Zipcode)+bathrooms+Squaredfeet+I(Age^2)), log(Soldprice)~ as.factor(Zipcode)+bedrooms+bathrooms+Stories+I(Age^2)+Squaredfeet+Lotsizeinsqft, test="F")
+
+
+```
+
+Stopped the steps as we see that there are no more significant coeffecients for the regressors.
+
+### The final model obtained from the Data1 is below:
+
+```{r class.output = "pre"}
+model_final1<-lm(log(Soldprice)~as.factor(Zipcode)+bathrooms+Squaredfeet+I(Age^2))
+summary(model_final1)
+
+```
+
+### Variable Selection on Data2 (after transformations):
+
+```{r class.output = "pre"}
+attach(housing_small)
+
+add1(lm(log(Soldprice)~as.factor(zipcode)+Squaredfeet+bathrooms+Fireplace), log(Soldprice)~ as.factor(zipcode)+bedrooms+bathrooms+I(Age^2)+Squaredfeet+Lotsizeinsqft+Parkingspaces+Basement+Stories+Fireplace, test="F")
+
+drop1(lm(log(Soldprice)~as.factor(zipcode)+Squaredfeet+bathrooms+Fireplace),data=housing_small,test="F")
+
+```
+
+Stopped the steps as we see that there are no more significant coeffecients for the regressors.
+
+### The final model obtained from the Data2 is below:
+
+```{r class.output = "pre"}
+
+model_final<-lm(log(Soldprice)~as.factor(zipcode)+Squaredfeet+bathrooms+Fireplace)
+summary(model_final)
+```
+
+
+## Model Checking & Validaton
+
+### For Data1, model_final1:
+
+```{r class.output = "pre"}
+par(mfrow=c(2,2))
+plot(model_final1)
+```
+
+### For Dat2, model_final1:
+
+```{r class.output = "pre"}
+par(mfrow=c(2,2))
+plot(model_final)
+```
+
+We notice that the QQ-plot is quite good and other plots also look good for both the models.
+
+**In order to validate the model, we have collected 15 new data points manually similar to our raw data acquisition and have performed the predictions on them using the final models after variable selection step.**
+
+
+```{r echo= FALSE, message=FALSE, warning=FALSE}
+test_data <- read.csv("test_data3.csv",h=T)
+```
+
+We will calculate the MPSE, PRESS, and R-square values to validate the two models.
+
+**Predicted residual error sum of squares (PRESS)** - form of cross-validation used in regression analysis to provide a summary measure of the fit of a model to a sample of observations that were not themselves used to estimate the model.The lower value of PRESS represents the good model.
+
+**Mean squared prediction error (MSPE)** - the expected value of the squared difference between the fitted values implied by the predictive function and the values of the unobservable function. Lower MSPE is favorable.
+
+**Prediction R square** - how well a regression model predicts responses for new observations. This statistic helps us determine when the model fits the original data but is less capable of providing valid predictions for new observations. High value of R-square is favorable.
+
+**Validation of 15 datapoints on the model built using DATA1**
+
+```{r class.output = "pre"}
+pred<- predict(model_final1,test_data,interval = c("confidence"), level = 0.95, type="response")
+
+prediction_error_actual_sold_price = test_data$Soldprice-exp(pred[,1])
+prediction_error_log_scale = log(test_data$Soldprice)-pred[,1]
+head(cbind(Actual_soldprice=test_data[,6],exp(pred),prediction_error_actual_sold_price,pred,prediction_error_log_scale),15)
+
+```
+
+The table has the original data along with the predictions on both actual and log scale along with the intervals at 95% confidence.
+
+```{r class.output = "pre"}
+MSPE = sum( (log(test_data$Soldprice) - pred[,1])^2 ) / dim(test_data)[1]
+MSPE
+PRESS = sum( (log(test_data$Soldprice) - pred[,1])^2)
+PRESS
+
+pred_Rsq = 1-PRESS/sum((log(test_data$Soldprice)-mean(log(test_data$Soldprice)))^2)
+pred_Rsq
+
+
+summary(model_final1)$r.squared
+```
+
+We have low MSPE and PRESS rations and high R-square value with 71.78% which means we expect the model to explain about 71.78% of the variability in prediction of a new observation.
+
+<br>**Validation of 15 datapoints on the model built using DATA2**
+
+```{r class.output = "pre"}
+test_data <- read.csv("test_data2.csv",h=T)
+
+```
+```{r}
+pred<- predict(model_final,test_data,interval = c("confidence"), level = 0.95, type="response")
+pred
+
+prediction_error_actual_sold_price = test_data$Soldprice-exp(pred[,1])
+prediction_error_log_scale = log(test_data$Soldprice)-pred[,1]
+head(cbind(Actual_soldprice=test_data[,6],exp(pred),prediction_error_actual_sold_price,pred,prediction_error_log_scale),15)
+
+```
+
+The table has the original data along with the predictions on both actual and log scale along with the intervals at 95% confidence.
+
+```{r class.output = "pre"}
+
+MSPE = sum( (log(test_data$Soldprice) - pred[,1])^2 ) / dim(test_data)[1]
+MSPE
+PRESS = sum( (log(test_data$Soldprice) - pred[,1])^2)
+PRESS
+
+pred_Rsq = 1-PRESS/sum((log(test_data$Soldprice)-mean(log(test_data$Soldprice)))^2)
+pred_Rsq
+
+
+summary(model_final)$r.squared
+```
+
+We have low MSPE and PRESS rations and high R-square value with 86.03% which means we expect the model to explain about 86.03% of the variability in prediction of a new observation.
+
+
+## Final Model
+
+**Model_1 :** 
+
+```{r class.output = "pre"}
+
+cc<-model_final$coef
+paste("log_sold_price =", paste(cc[1], paste(cc[-1], names(cc[-1]), sep=" * ", collapse=" + "), sep=" + "), "+ e")
+
+summary(model_final)
+```
+
+**Model_2 :**
+
+```{r class.output = "pre"}
+cc<-model_final1$coef
+paste("log_sold_price =", paste(cc[1], paste(cc[-1], names(cc[-1]), sep=" * ", collapse=" + "), sep=" + "), "+ e")
+
+summary(model_final1)
+```
+
+
+## Conclusion:
+
+We have successfully built a model for predicting the selling price of a house in an area based on multiple features. At this point we cannot say that this linear regression model is  the best model possible for this dataset but yes we did get satisfactory results with different combinations of features as described above.
